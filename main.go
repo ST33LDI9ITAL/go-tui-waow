@@ -135,6 +135,7 @@ type crazyApp struct {
 	ctrUp *tui.Ref; ctrDown *tui.Ref; ctrReset *tui.Ref
 	modalOpen *tui.Ref; modalYes *tui.Ref; modalNo *tui.Ref
 	matrixPhase [30]float64
+	sidebarScrollY *tui.State[int]
 	sectionRefs map[string]*tui.Ref
 	themeRefs  map[string]*tui.Ref
 }
@@ -150,6 +151,7 @@ func newCrazyApp() *crazyApp {
 		startTime: time.Now(),
 		ctrUp: tui.NewRef(), ctrDown: tui.NewRef(), ctrReset: tui.NewRef(),
 		modalOpen: tui.NewRef(), modalYes: tui.NewRef(), modalNo: tui.NewRef(),
+		sidebarScrollY: tui.NewState(0),
 		sectionRefs: map[string]*tui.Ref{
 			"bounce": tui.NewRef(), "progress": tui.NewRef(),
 			"metrics": tui.NewRef(), "fireworks": tui.NewRef(),
@@ -167,7 +169,7 @@ func (a *crazyApp) BindApp(app *tui.App) {
 	a.scrollWave.BindApp(app); a.bouncePhase.BindApp(app)
 	a.borderHue.BindApp(app); a.counter.BindApp(app)
 	a.theme.BindApp(app); a.partyMode.BindApp(app)
-	a.showModal.BindApp(app); a.visible.BindApp(app)
+	a.showModal.BindApp(app); a.visible.BindApp(app); a.sidebarScrollY.BindApp(app)
 }
 
 func (a *crazyApp) KeyMap() tui.KeyMap {
@@ -183,6 +185,16 @@ func (a *crazyApp) KeyMap() tui.KeyMap {
 }
 
 func (a *crazyApp) HandleMouse(me tui.MouseEvent) bool {
+	// Mouse wheel scrolls the sidebar using reactive state
+	switch me.Button {
+	case tui.MouseWheelUp:
+		a.sidebarScrollY.Set(a.sidebarScrollY.Get() - 3)
+		return true
+	case tui.MouseWheelDown:
+		a.sidebarScrollY.Set(a.sidebarScrollY.Get() + 3)
+		return true
+	}
+
 	// Section toggle clicks via ref map
 	if me.Button == tui.MouseLeft && me.Action == tui.MousePress {
 		for id, ref := range a.sectionRefs {
@@ -253,6 +265,7 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 	mc := a.mc()
 	sb := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
 		tui.WithScrollbarHidden(true),
+		tui.WithScrollOffset(0, a.sidebarScrollY.Get()),
 		tui.WithWidth(sw),
 		tui.WithHeight(h-2),
 		tui.WithBorder(tui.BorderSingle),
