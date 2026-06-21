@@ -238,7 +238,7 @@ func (a *crazyApp) animate() {
 	step := 0.06
 	if a.partyMode.Get() { step = 0.15 }
 	a.wavePhase.Update(func(v float64) float64 { return v + step })
-	a.scrollWave.Update(func(v float64) float64 { return v + 0.02 })
+	a.scrollWave.Update(func(v float64) float64 { return v + 0.005 })
 	a.borderHue.Update(func(v float64) float64 { return v + 0.5 })
 	if a.frame%5 == 0 { a.spinFrame.Update(func(v int) int { return v + 1 }) }
 	a.bouncePhase.Update(func(v float64) float64 { return v + 0.04 })
@@ -425,7 +425,7 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 	statusBar.AddChild(textEl(" 🖱️ Click sidebar buttons", tui.NewStyle().Dim()))
 	statusBar.AddChild(textEl(" 🖱️ Scroll wheel on demos", tui.NewStyle().Dim()))
 	if a.partyMode.Get() {
-		statusBar.AddChild(textEl(" 🎊 PARTY MODE", hslStyle(float64(a.frame)*36, 1.0, 0.6)))
+		statusBar.AddChild(textEl(" 🎊 PARTY TIME!", hslStyle(float64(a.frame)*36, 1.0, 0.6)))
 	}
 	// Flex spacer to push everything right
 	flexGrow := flex(tui.Column, tui.WithFlexGrow(1))
@@ -462,6 +462,30 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 
 
 func (a *crazyApp) renderTicker() *tui.Element {
+	if a.partyMode.Get() {
+		// Party mode: each character bounces with sine wave and rainbow colors
+		text := tickerText(a.scrollWave.Get())
+		r := flex(tui.Row, tui.WithJustify(tui.JustifyCenter), tui.WithGap(0))
+		for i, ch := range text {
+			chStr := string(ch)
+			if chStr == " " {
+				r.AddChild(textEl(" ", tui.NewStyle()))
+				continue
+			}
+			// Sine wave vertical offset via margin-top
+			phase := a.wavePhase.Get()*0.5 + float64(i)*0.5
+			sineVal := math.Sin(phase)
+			bounce := int((sineVal + 1) * 1.5) // 0 to 3 rows of margin
+			chEl := flex(tui.Row, tui.WithMarginTRBL(bounce, 0, 0, 0))
+			// Map sine to color hue
+			hue := math.Mod(float64(i)*30+a.wavePhase.Get()*120, 360)
+			rr, gg, bb := hslToRGB(hue, 1.0, 0.6)
+			st := tui.NewStyle().Bold().Foreground(tui.RGBColor(rr, gg, bb))
+			chEl.AddChild(textEl(chStr, st))
+			r.AddChild(chEl)
+		}
+		return r
+	}
 	r := flex(tui.Row, tui.WithJustify(tui.JustifyCenter))
 	r.AddChild(textEl(tickerText(a.scrollWave.Get()), tui.NewStyle().Bold().Foreground(a.mc())))
 	return r
@@ -497,17 +521,35 @@ func (a *crazyApp) renderBouncingBoxes() *tui.Element {
 }
 
 func (a *crazyApp) renderProgress() *tui.Element {
+	mc := a.mc()
+	ac := a.ac()
 	elapsed := time.Since(a.startTime).Seconds()
-	ct := math.Mod(elapsed, 4.0)
-	lin := ct / 3.0
+	ct := math.Mod(elapsed, 6.0)
+	lin := ct / 5.0
 	if lin > 1 { lin = 1 }
+	if a.partyMode.Get() {
+		ct = math.Mod(elapsed, 2.0)
+		lin = ct / 1.5
+		if lin > 1 { lin = 1 }
+	}
 	w := flex(tui.Column, tui.WithBorder(tui.BorderSingle),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(ac)),
 		tui.WithPadding(1), tui.WithGap(1))
-	w.AddChild(textEl("📊 PROGRESS PARADE", tui.NewStyle().Bold().Foreground(a.mc())))
-	w.AddChild(textEl("3s loop: Linear vs Cubic Ease", tui.NewStyle().Dim()))
-	w.AddChild(barRow("📈 Linear:", renderBar(lin, 30), tui.Cyan))
-	w.AddChild(barRow("🎯 Eased:", renderBar(easeInOutCubic(lin), 30), tui.Green))
+	w.AddChild(textEl("📊 PROGRESS PARADE", tui.NewStyle().Bold().Foreground(mc)))
+
+	barColor1 := tui.Cyan
+	barColor2 := tui.Green
+	if a.partyMode.Get() {
+		h1 := math.Mod(a.wavePhase.Get()*60, 360)
+		r1, g1, b1 := hslToRGB(h1, 1.0, 0.6)
+		barColor1 = tui.RGBColor(r1, g1, b1)
+		h2 := math.Mod(a.wavePhase.Get()*60+180, 360)
+		r2, g2, b2 := hslToRGB(h2, 1.0, 0.6)
+		barColor2 = tui.RGBColor(r2, g2, b2)
+	}
+
+	w.AddChild(barRow("📈 Linear:", renderBar(lin, 30), barColor1))
+	w.AddChild(barRow("🎯 Eased:", renderBar(easeInOutCubic(lin), 30), barColor2))
 	return w
 }
 
