@@ -136,12 +136,14 @@ type crazyApp struct {
 	modalOpen *tui.Ref; modalYes *tui.Ref; modalNo *tui.Ref
 	matrixPhase [30]float64
 	sidebarScrollY *tui.State[int]
+	sidebarWidth   int // cached sidebar width for mouse hit-testing
+	mainScrollY    *tui.State[int]
 	sectionRefs map[string]*tui.Ref
 	themeRefs  map[string]*tui.Ref
 }
 
 func newCrazyApp() *crazyApp {
-	def := map[string]bool{"matrix": true}
+	def := map[string]bool{}
 	return &crazyApp{
 		spinFrame: tui.NewState(0), wavePhase: tui.NewState(0.0),
 		scrollWave: tui.NewState(0.0), bouncePhase: tui.NewState(0.0),
@@ -185,13 +187,20 @@ func (a *crazyApp) KeyMap() tui.KeyMap {
 }
 
 func (a *crazyApp) HandleMouse(me tui.MouseEvent) bool {
-	// Mouse wheel scrolls the sidebar using reactive state
 	switch me.Button {
 	case tui.MouseWheelUp:
-		a.sidebarScrollY.Set(a.sidebarScrollY.Get() - 3)
+		if me.X < a.sidebarWidth {
+			a.sidebarScrollY.Set(a.sidebarScrollY.Get() - 3)
+		} else if a.mainScrollY != nil {
+			a.mainScrollY.Set(a.mainScrollY.Get() - 3)
+		}
 		return true
 	case tui.MouseWheelDown:
-		a.sidebarScrollY.Set(a.sidebarScrollY.Get() + 3)
+		if me.X < a.sidebarWidth {
+			a.sidebarScrollY.Set(a.sidebarScrollY.Get() + 3)
+		} else if a.mainScrollY != nil {
+			a.mainScrollY.Set(a.mainScrollY.Get() + 3)
+		}
 		return true
 	}
 
@@ -267,7 +276,6 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		tui.WithScrollbarHidden(true),
 		tui.WithScrollOffset(0, a.sidebarScrollY.Get()),
 		tui.WithWidth(sw),
-		tui.WithHeight(h-2),
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
 		tui.WithPadding(1), tui.WithGap(1))
@@ -362,17 +370,25 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 	w, h := app.Size()
 	sw := w * 35 / 100
 	if sw < 30 { sw = 30 }
+	a.sidebarWidth = sw
 
-	outer := flex(tui.Row, tui.WithMinWidth(w), tui.WithMinHeight(h))
+	outer := flex(tui.Row, tui.WithMinWidth(w), tui.WithFlexGrow(1))
 	outer.AddChild(a.renderSidebar(sw, h))
 
-	// Main view: show only the selected panel
-	main := flex(tui.Column, tui.WithFlexGrow(1),
+	// Main view: scrollable with state for mouse wheel
+	if a.mainScrollY == nil {
+		a.mainScrollY = tui.NewState(0)
+		a.mainScrollY.BindApp(app)
+	}
+	main := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
+		tui.WithScrollbarHidden(true),
+		tui.WithScrollOffset(0, a.mainScrollY.Get()),
+		tui.WithFlexGrow(1),
 		tui.WithPadding(1), tui.WithGap(1))
 
-	main.AddChild(a.renderTitle())
 	main.AddChild(a.renderTicker())
 
+	// The ticker IS the title
 	for _, p := range []struct{ id string; fn func() *tui.Element }{
 		{"bounce", a.renderBouncingBoxes},
 		{"progress", a.renderProgress},
@@ -396,28 +412,59 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 		main.AddChild(textEl("✨ Select a section from the sidebar!", tui.NewStyle().Bold().Foreground(a.mc())))
 	}
 
-	main.AddChild(a.renderFooter())
 	outer.AddChild(main)
 
-	if modal := a.renderModalOverlay(); modal != nil { outer.AddChild(modal) }
-	return outer
+	// Status bar (full width at bottom)
+	statusBar := flex(tui.Row,
+		tui.WithWidth(w),
+		tui.WithBorder(tui.BorderSingle),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
+		tui.WithPadding(0))
+	statusBar.AddChild(textEl(" q/Esc quit", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" 🎉 Space party", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" 🖱️ Click sidebar buttons", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" 🖱️ Scroll wheel on demos", tui.NewStyle().Dim()))
+	if a.partyMode.Get() {
+		statusBar.AddChild(textEl(" 🎊 PARTY MODE", hslStyle(float64(a.frame)*36, 1.0, 0.6)))
+	}
+	// Flex spacer to push everything right
+	flexGrow := flex(tui.Column, tui.WithFlexGrow(1))
+	statusBar.AddChild(flexGrow)
+
+	// Wrap everything in a full outer frame
+	outer2 := flex(tui.Column, tui.WithMinWidth(w), tui.WithMinHeight(h))
+
+	// Menu bar at top
+	menuBar := flex(tui.Row,
+		tui.WithWidth(w),
+		tui.WithBorder(tui.BorderSingle),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(a.mc())),
+		tui.WithPadding(0), tui.WithGap(1))
+	for _, m := range []struct{ label, key string }{
+		{"📁 File", "F"},
+		{"✏️ Edit", "E"},
+		{"👁️ View", "V"},
+		{"❓ Help", "H"},
+	} {
+		menuBar.AddChild(textEl(" "+m.label+" ", tui.NewStyle().Foreground(a.mc())))
+	}
+	// Spacer
+	menuBar.AddChild(flex(tui.Column, tui.WithFlexGrow(1)))
+	menuBar.AddChild(textEl(fmt.Sprintf(" 🎯 %s ", a.theme.Get()), tui.NewStyle().Dim()))
+
+	outer2.AddChild(menuBar)
+	outer2.AddChild(outer)
+	outer2.AddChild(statusBar)
+
+	if modal := a.renderModalOverlay(); modal != nil { outer2.AddChild(modal) }
+	return outer2
 }
 
-func (a *crazyApp) renderTitle() *tui.Element {
-	t := "🚀 GO-TUI CRAZY DEMO 🎉"
-	if a.partyMode.Get() { t = "🎊 PARTY MODE ACTIVATED! 🎊" }
-	r := flex(tui.Row, tui.WithJustify(tui.JustifyCenter))
-	r.AddChild(textEl(t, tui.NewStyle().Bold().Foreground(a.mc())))
-	return r
-}
 
 func (a *crazyApp) renderTicker() *tui.Element {
-	w := flex(tui.Column, tui.WithBorder(tui.BorderSingle),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
-		tui.WithPadding(1))
-	w.AddChild(textEl("📡 SCROLLING TICKER", tui.NewStyle().Bold().Foreground(a.mc())))
-	w.AddChild(textEl(tickerText(a.scrollWave.Get()), hslStyle(a.wavePhase.Get()*36, 1.0, 0.6)))
-	return w
+	r := flex(tui.Row, tui.WithJustify(tui.JustifyCenter))
+	r.AddChild(textEl(tickerText(a.scrollWave.Get()), tui.NewStyle().Bold().Foreground(a.mc())))
+	return r
 }
 
 func (a *crazyApp) renderBouncingBoxes() *tui.Element {
@@ -474,7 +521,7 @@ func barRow(label, bar string, col tui.Color) *tui.Element {
 
 func (a *crazyApp) renderMetrics() *tui.Element {
 	f := a.spinFrame.Get()
-	w := flex(tui.Column, tui.WithFlexGrow(1),
+	w := flex(tui.Column,
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
 		tui.WithPadding(1), tui.WithGap(1))
@@ -509,7 +556,7 @@ func spinRow(s string, c tui.Color, l string) *tui.Element {
 }
 
 func (a *crazyApp) renderFireworks() *tui.Element {
-	w := flex(tui.Column, tui.WithFlexGrow(1),
+	w := flex(tui.Column,
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.BrightBlack)),
 		tui.WithPadding(1))
@@ -536,14 +583,14 @@ func (a *crazyApp) renderFireworks() *tui.Element {
 }
 
 func (a *crazyApp) renderScrollableMap() *tui.Element {
-	w := flex(tui.Column, tui.WithFlexGrow(1),
+	w := flex(tui.Column,
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
-		tui.WithPadding(1), tui.WithMinHeight(10))
+		tui.WithPadding(1))
 	w.AddChild(textEl("🌊 WAVE SCROLLER", tui.NewStyle().Bold().Foreground(a.mc())))
 
 	// Ping-pong scroll position
-	const totalRows = 60
+	const totalRows = 16
 	t := a.scrollWave.Get()
 	pos := int(t * 12)
 	cycle := totalRows * 2
@@ -553,8 +600,8 @@ func (a *crazyApp) renderScrollableMap() *tui.Element {
 	}
 
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
-		tui.WithScrollOffset(0, pos), tui.WithMinHeight(10))
-	in := flex(tui.Column, tui.WithMinWidth(120), tui.WithMinHeight(totalRows+5))
+		tui.WithScrollOffset(0, pos), tui.WithHeight(10))
+	in := flex(tui.Column, tui.WithMinWidth(120), tui.WithMinHeight(20))
 
 	phase := a.wavePhase.Get()
 	for row := 0; row < totalRows; row++ {
@@ -609,9 +656,9 @@ func (a *crazyApp) renderSymbolStorm() *tui.Element {
 	phase := a.wavePhase.Get()
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
 		tui.WithScrollOffset(0, int(phase*10)%60),
-		tui.WithMinHeight(7))
-	in := flex(tui.Column, tui.WithMinWidth(200), tui.WithMinHeight(300))
-	for row := 0; row < 20; row++ {
+		tui.WithHeight(7))
+	in := flex(tui.Column, tui.WithMinWidth(200), tui.WithMinHeight(12))
+	for row := 0; row < 10; row++ {
 		var sb strings.Builder
 		for col := 0; col < 30; col++ {
 			sym, _ := randomSymbol(phase, row*30+col)
@@ -625,13 +672,13 @@ func (a *crazyApp) renderSymbolStorm() *tui.Element {
 }
 
 func (a *crazyApp) renderMatrixRain() *tui.Element {
-	w := flex(tui.Column, tui.WithFlexGrow(1),
+	w := flex(tui.Column,
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.Green)),
-		tui.WithPadding(1), tui.WithMinHeight(12))
+		tui.WithPadding(1))
 	w.AddChild(textEl("💚 MATRIX RAIN", tui.NewStyle().Bold().Foreground(tui.Green)))
 
-	in := flex(tui.Column, tui.WithMinWidth(300), tui.WithMinHeight(400))
+	in := flex(tui.Column, tui.WithMinWidth(300), tui.WithMinHeight(18))
 
 	chars := []string{
 		"ﾀ","ﾁ","ﾂ","ﾃ","ﾄ","ﾅ","ﾆ","ﾇ","ﾈ","ﾉ",
@@ -641,7 +688,7 @@ func (a *crazyApp) renderMatrixRain() *tui.Element {
 	}
 
 	const cols = 30
-	const rows = 30
+	const rows = 16
 
 	for row := 0; row < rows; row++ {
 		rowEl := flex(tui.Row, tui.WithGap(0))
@@ -684,21 +731,12 @@ func (a *crazyApp) renderMatrixRain() *tui.Element {
 
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
 		tui.WithScrollbarHidden(true),
-		tui.WithMinHeight(9))
+		tui.WithHeight(9))
 	sc.AddChild(in)
 	w.AddChild(sc)
 	return w
 }
 
-func (a *crazyApp) renderFooter() *tui.Element {
-	r := flex(tui.Row, tui.WithGap(2), tui.WithJustify(tui.JustifyCenter))
-	r.AddChild(textEl("⌨️ q/Esc quit", tui.NewStyle().Dim()))
-	r.AddChild(textEl("🎉 Space party", tui.NewStyle().Dim()))
-	if a.partyMode.Get() {
-		r.AddChild(textEl("🎊 PARTY MODE", hslStyle(float64(a.frame)*36, 1.0, 0.6)))
-	}
-	return r
-}
 
 func (a *crazyApp) renderModalOverlay() *tui.Element {
 	if !a.showModal.Get() { return nil }
