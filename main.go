@@ -157,7 +157,7 @@ func newCrazyApp() *crazyApp {
 		sectionRefs: map[string]*tui.Ref{
 			"bounce": tui.NewRef(), "progress": tui.NewRef(),
 			"metrics": tui.NewRef(), "fireworks": tui.NewRef(),
-			"map": tui.NewRef(), "symbols": tui.NewRef(), "matrix": tui.NewRef(),
+			"symbols": tui.NewRef(), "matrix": tui.NewRef(), "counter": tui.NewRef(),
 		},
 		themeRefs: map[string]*tui.Ref{
 			"cyber": tui.NewRef(), "ocean": tui.NewRef(),
@@ -292,6 +292,7 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		{"map", "🌊", "Wave Scroller"},
 		{"symbols", "🌀", "Symbol Storm"},
 		{"matrix", "💚", "Matrix Rain"},
+		{"counter", "🔢", "Counter"},
 	} {
 		on := a.isOn(p.id)
 		check := "⬜"
@@ -308,9 +309,6 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		sb.AddChild(btn)
 	}
 
-	sb.AddChild(textEl("", tui.NewStyle()))
-
-	// Theme
 	sb.AddChild(textEl("🎨 Theme", tui.NewStyle().Bold().Foreground(mc).Dim()))
 	for _, th := range themeList {
 		col := tui.BrightBlack
@@ -322,34 +320,16 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		if ref, ok := a.themeRefs[th]; ok { ref.Set(btn) }
 		thCopy := th
 		btn.SetOnFocus(func(e *tui.Element) { a.theme.Set(thCopy) })
-		btn.AddChild(textEl(fmt.Sprintf("  %s", th), tui.NewStyle().Foreground(col)))
 		sb.AddChild(btn)
 	}
 
 	sb.AddChild(textEl("", tui.NewStyle()))
-
-	// Counter
-	sb.AddChild(textEl("🔢 Counter", tui.NewStyle().Bold().Foreground(mc).Dim()))
-	sb.AddChild(miniBtn("➖ Decrease", tui.Red, a.ctrDown, sw))
-	val := a.counter.Get()
-	vCol := tui.Cyan
-	if val > 0 { vCol = tui.Green }
-	if val < 0 { vCol = tui.Red }
-	sb.AddChild(textEl(fmt.Sprintf("   Value: %d", val), tui.NewStyle().Bold().Foreground(vCol)))
-	sb.AddChild(miniBtn("➕ Increase", tui.Green, a.ctrUp, sw))
-	sb.AddChild(miniBtn("🔄 Reset", tui.BrightBlack, a.ctrReset, sw))
 
 	sb.AddChild(textEl("", tui.NewStyle()))
 
 	// Danger
 	sb.AddChild(textEl("⚠️ Danger", tui.NewStyle().Bold().Foreground(tui.Red).Dim()))
 	sb.AddChild(miniBtn("⚠️ Reset Modal", tui.Red, a.modalOpen, sw))
-
-	sb.AddChild(textEl("", tui.NewStyle()))
-	sb.AddChild(textEl("⌨️ Keys", tui.NewStyle().Bold().Foreground(mc).Dim()))
-	for _, k := range []string{" q/Esc quit", " Space party", " M modal", " +/- counter"} {
-		sb.AddChild(textEl(k, tui.NewStyle().Dim()))
-	}
 
 	return sb
 }
@@ -390,6 +370,7 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 
 	// The ticker IS the title
 	for _, p := range []struct{ id string; fn func() *tui.Element }{
+		{"counter", a.renderCounter},
 		{"bounce", a.renderBouncingBoxes},
 		{"progress", a.renderProgress},
 		{"metrics", a.renderMetrics},
@@ -421,9 +402,9 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
 		tui.WithPadding(0))
 	statusBar.AddChild(textEl(" q/Esc quit", tui.NewStyle().Dim()))
-	statusBar.AddChild(textEl(" 🎉 Space party", tui.NewStyle().Dim()))
-	statusBar.AddChild(textEl(" 🖱️ Click sidebar buttons", tui.NewStyle().Dim()))
-	statusBar.AddChild(textEl(" 🖱️ Scroll wheel on demos", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" 🎉 Space = party", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" M = modal", tui.NewStyle().Dim()))
+	statusBar.AddChild(textEl(" +/- = counter", tui.NewStyle().Dim()))
 	if a.partyMode.Get() {
 		statusBar.AddChild(textEl(" 🎊 PARTY TIME!", hslStyle(float64(a.frame)*36, 1.0, 0.6)))
 	}
@@ -489,6 +470,26 @@ func (a *crazyApp) renderTicker() *tui.Element {
 	r := flex(tui.Row, tui.WithJustify(tui.JustifyCenter))
 	r.AddChild(textEl(tickerText(a.scrollWave.Get()), tui.NewStyle().Bold().Foreground(a.mc())))
 	return r
+}
+
+func (a *crazyApp) renderCounter() *tui.Element {
+	mc := a.mc()
+	ac := a.ac()
+	w := flex(tui.Column, tui.WithBorder(tui.BorderSingle),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(ac)),
+		tui.WithPadding(1), tui.WithGap(1))
+	w.AddChild(textEl("🔢 INTERACTIVE COUNTER", tui.NewStyle().Bold().Foreground(mc)))
+	val := a.counter.Get()
+	vCol := tui.Cyan
+	if val > 0 { vCol = tui.Green }
+	if val < 0 { vCol = tui.Red }
+	row := flex(tui.Row, tui.WithGap(2), tui.WithJustify(tui.JustifyCenter))
+	row.AddChild(textEl("➖", tui.NewStyle().Foreground(tui.Red).Bold()))
+	row.AddChild(textEl(fmt.Sprintf("  %d  ", val), tui.NewStyle().Bold().Foreground(vCol)))
+	row.AddChild(textEl("➕", tui.NewStyle().Foreground(tui.Green).Bold()))
+	w.AddChild(row)
+	w.AddChild(textEl(fmt.Sprintf("  Value: %d  |  Press +/- or click sidebar buttons", val), tui.NewStyle().Dim()))
+	return w
 }
 
 func (a *crazyApp) renderBouncingBoxes() *tui.Element {
