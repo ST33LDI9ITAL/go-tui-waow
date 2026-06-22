@@ -116,6 +116,17 @@ var themeColors = map[string]struct{ fg, accent tui.Color }{
 }
 var themeList = []string{"cyber", "ocean", "forest", "sunset"}
 
+var menuDefs = []struct {
+	label string
+	items []string
+}{
+	{"📁 File", []string{"New", "Open...", "Save", "Save As...", "---", "Exit"}},
+	{"✏️ Edit", []string{"Undo", "Redo", "---", "Cut", "Copy", "Paste", "Select All"}},
+	{"👁️ View", []string{"Zoom In", "Zoom Out", "---", "Toggle Sidebar", "Toggle Status Bar", "---", "Fullscreen"}},
+	{"🛠️ Tools", []string{"Settings", "Key Bindings", "Theme Editor", "---", "Developer Tools"}},
+	{"❓ Help", []string{"About go-tui", "Documentation", "Report Issue", "Check for Updates"}},
+}
+
 // ===== APP STATE =====
 
 type crazyApp struct {
@@ -138,6 +149,7 @@ type crazyApp struct {
 	sidebarScrollY *tui.State[int]
 	sidebarWidth   int // cached sidebar width for mouse hit-testing
 	mainScrollY    *tui.State[int]
+	openMenu       string // which menu is open ("", "📁 File", etc.)
 	sectionRefs map[string]*tui.Ref
 	themeRefs  map[string]*tui.Ref
 }
@@ -187,6 +199,29 @@ func (a *crazyApp) KeyMap() tui.KeyMap {
 }
 
 func (a *crazyApp) HandleMouse(me tui.MouseEvent) bool {
+	// Menu bar click handling
+	if me.Button == tui.MouseLeft && me.Action == tui.MousePress && me.Y == 0 {
+		x := 1
+		for _, m := range menuDefs {
+			labelW := len([]rune(m.label)) + 2
+			if me.X >= x && me.X < x+labelW {
+				if a.openMenu == m.label {
+					a.openMenu = ""
+				} else {
+					a.openMenu = m.label
+				}
+				return true
+			}
+			x += labelW
+		}
+		a.openMenu = ""
+		return true
+	}
+	// Clicking outside the menu bar closes open menus
+	if a.openMenu != "" && me.Button == tui.MouseLeft && me.Action == tui.MousePress {
+		a.openMenu = ""
+	}
+
 	switch me.Button {
 	case tui.MouseWheelUp:
 		if me.X < a.sidebarWidth {
@@ -301,8 +336,8 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		if on { col = mc }
 		btn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
 			tui.WithBorderStyle(tui.NewStyle().Foreground(col)),
-			tui.WithPadding(0))
-		btn.AddChild(textEl(fmt.Sprintf("%s %s", check, p.label), tui.NewStyle().Foreground(col)))
+			tui.WithPaddingTRBL(0, 0, 0, 6))
+		btn.AddChild(textEl(fmt.Sprintf(" %s %s", check, p.label), tui.NewStyle().Foreground(col)))
 		if ref, ok := a.sectionRefs[p.id]; ok { ref.Set(btn) }
 		idCopy := p.id
 		btn.SetOnFocus(func(e *tui.Element) { a.toggle(idCopy) })
@@ -315,7 +350,7 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		if a.theme.Get() == th { col = mc }
 		btn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
 			tui.WithBorderStyle(tui.NewStyle().Foreground(col)),
-			tui.WithPadding(0))
+			tui.WithPaddingTRBL(0, 0, 0, 6))
 		btn.AddChild(textEl(fmt.Sprintf("  %s", th), tui.NewStyle().Foreground(col)))
 		if ref, ok := a.themeRefs[th]; ok { ref.Set(btn) }
 		thCopy := th
@@ -348,8 +383,8 @@ func miniBtn(text string, col tui.Color, ref *tui.Ref, maxW int) *tui.Element {
 
 func (a *crazyApp) Render(app *tui.App) *tui.Element {
 	w, h := app.Size()
-	sw := w * 35 / 100
-	if sw < 30 { sw = 30 }
+	sw := w * 25 / 100
+	if sw < 24 { sw = 24 }
 	a.sidebarWidth = sw
 
 	outer := flex(tui.Row, tui.WithMinWidth(w), tui.WithFlexGrow(1))
@@ -420,14 +455,13 @@ func (a *crazyApp) Render(app *tui.App) *tui.Element {
 		tui.WithWidth(w),
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.mc())),
-		tui.WithPadding(0), tui.WithGap(1))
-	for _, m := range []struct{ label, key string }{
-		{"📁 File", "F"},
-		{"✏️ Edit", "E"},
-		{"👁️ View", "V"},
-		{"❓ Help", "H"},
-	} {
-		menuBar.AddChild(textEl(" "+m.label+" ", tui.NewStyle().Foreground(a.mc())))
+		tui.WithPadding(0), tui.WithGap(0))
+	for _, m := range menuDefs {
+		st := tui.NewStyle().Foreground(a.mc())
+		if a.openMenu == m.label {
+			st = st.Bold().Reverse()
+		}
+		menuBar.AddChild(textEl(" "+m.label+" ", st))
 	}
 	// Spacer
 	menuBar.AddChild(flex(tui.Column, tui.WithFlexGrow(1)))
