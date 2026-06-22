@@ -355,7 +355,7 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		if on { col = mc }
 		btn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
 			tui.WithBorderStyle(tui.NewStyle().Foreground(col)),
-			tui.WithPaddingTRBL(0, 0, 0, 6))
+			tui.WithPaddingTRBL(0, 0, 0, 4))
 		btn.AddChild(textEl(fmt.Sprintf(" %s %s", check, p.label), tui.NewStyle().Foreground(col)))
 		if ref, ok := a.sectionRefs[p.id]; ok { ref.Set(btn) }
 		idCopy := p.id
@@ -369,7 +369,7 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 		if a.theme.Get() == th { col = mc }
 		btn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
 			tui.WithBorderStyle(tui.NewStyle().Foreground(col)),
-			tui.WithPaddingTRBL(0, 0, 0, 6))
+			tui.WithPaddingTRBL(0, 0, 0, 4))
 		btn.AddChild(textEl(fmt.Sprintf("  %s", th), tui.NewStyle().Foreground(col)))
 		if ref, ok := a.themeRefs[th]; ok { ref.Set(btn) }
 		thCopy := th
@@ -539,29 +539,23 @@ func (a *crazyApp) renderCounter() *tui.Element {
 
 	row := flex(tui.Row, tui.WithGap(1), tui.WithJustify(tui.JustifyCenter))
 
-	// Minus button
-	mBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.Red)),
-		tui.WithPadding(0), tui.WithFocusable(true))
+	// Value
+	row.AddChild(textEl(fmt.Sprintf("  %d  ", val), tui.NewStyle().Bold().Foreground(vCol)))
+
+	// Minus button (no border)
+	mBtn := flex(tui.Row, tui.WithPadding(0), tui.WithFocusable(true))
 	mBtn.AddChild(textEl(" ➖ ", tui.NewStyle().Foreground(tui.Red).Bold()))
 	a.ctrDown.Set(mBtn)
 	row.AddChild(mBtn)
 
-	// Value
-	row.AddChild(textEl(fmt.Sprintf("  %d  ", val), tui.NewStyle().Bold().Foreground(vCol)))
-
-	// Plus button
-	pBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.Green)),
-		tui.WithPadding(0), tui.WithFocusable(true))
+	// Plus button (no border)
+	pBtn := flex(tui.Row, tui.WithPadding(0), tui.WithFocusable(true))
 	pBtn.AddChild(textEl(" ➕ ", tui.NewStyle().Foreground(tui.Green).Bold()))
 	a.ctrUp.Set(pBtn)
 	row.AddChild(pBtn)
 
-	// Reset button
-	rBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.BrightBlack)),
-		tui.WithPadding(0), tui.WithFocusable(true))
+	// Reset button (no border)
+	rBtn := flex(tui.Row, tui.WithPadding(0), tui.WithFocusable(true))
 	rBtn.AddChild(textEl(" 🔄 ", tui.NewStyle().Dim()))
 	a.ctrReset.Set(rBtn)
 	row.AddChild(rBtn)
@@ -713,6 +707,7 @@ func (a *crazyApp) renderScrollableMap() *tui.Element {
 
 	// Ping-pong scroll position
 	const totalRows = 16
+	viewRows := 16
 	t := a.scrollWave.Get()
 	pos := int(t * 12)
 	cycle := totalRows * 2
@@ -722,8 +717,8 @@ func (a *crazyApp) renderScrollableMap() *tui.Element {
 	}
 
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
-		tui.WithScrollOffset(0, pos), tui.WithHeight(10))
-	in := flex(tui.Column, tui.WithMinWidth(120), tui.WithMinHeight(20))
+		tui.WithScrollOffset(0, pos), tui.WithHeight(viewRows))
+	in := flex(tui.Column, tui.WithMinWidth(120), tui.WithMinHeight(viewRows))
 
 	phase := a.wavePhase.Get()
 	for row := 0; row < totalRows; row++ {
@@ -770,23 +765,49 @@ func randomSymbol(phase float64, idx int) (string, tui.Color) {
 }
 
 func (a *crazyApp) renderSymbolStorm() *tui.Element {
-	w := flex(tui.Column, tui.WithMinHeight(10),
+	w := flex(tui.Column, tui.WithFlexGrow(1),
 		tui.WithBorder(tui.BorderSingle),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
 		tui.WithPadding(1))
 	w.AddChild(textEl("🌀 SYMBOL STORM", tui.NewStyle().Bold().Foreground(a.mc())))
+
+	emojis := []string{
+		"😀","😎","🤖","👻","🎃","💀","👽","🤡","🐶","🐱",
+		"🦊","🐸","🐵","🦄","🐲","🦋","🐞","🌻","🌸","🌺",
+		"🍕","🍔","🌮","🍩","🍪","🧁","☕","🍺","🍷","🧊",
+		"⚽","🏀","🎾","🏈","🚗","🚀","✈️","🚂","🚲","🛸",
+		"❤️","💔","💖","💡","🔑","🔔","🎵","🎶","📀","💎",
+		"🇺🇸","🇯🇵","🇩🇪","🇫🇷","🇧🇷","🇨🇳","🇮🇳","🇬🇧","🇰🇷","🇪🇸",
+		"👨‍👩‍👧‍👦","👩‍💻","👨‍🔬","🙋‍♂️","🕺","💃","🧘‍♂️","🏃‍♂️","🤝","💪",
+		"☀️","🌈","⭐","🌙","☁️","❄️","🔥","🌊","💨","🌀",
+		"☮","☯","♻","⚛","♾","🔱","💫","⚜","🔰","💠",
+		"🅰","🆎","🅱","🆑","🆒","🆓","ℹ️","🆗","🆘","🆙",
+		"一","二","三","四","五","六","七","八","九","十",
+		"あ","い","う","え","お","か","き","く","け","こ",
+		"α","β","γ","δ","ε","ζ","η","θ","ι","κ",
+		"0","1","2","3","4","5","6","7","8","9",
+	}
+
+	const rows = 16
 	phase := a.wavePhase.Get()
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
-		tui.WithScrollOffset(0, int(phase*10)%60),
-		tui.WithHeight(7))
-	in := flex(tui.Column, tui.WithMinWidth(200), tui.WithMinHeight(12))
-	for row := 0; row < 10; row++ {
-		var sb strings.Builder
-		for col := 0; col < 30; col++ {
-			sym, _ := randomSymbol(phase, row*30+col)
-			sb.WriteString(sym)
+		tui.WithScrollOffset(0, int(phase*20)%60),
+		tui.WithHeight(rows))
+	in := flex(tui.Column, tui.WithMinWidth(200), tui.WithMinHeight(rows))
+	for row := 0; row < rows; row++ {
+		rowEl := flex(tui.Row, tui.WithGap(0))
+		// Row length varies like a wave: max 20 at center, min 6 at edges
+		sinePos := float64(row)/float64(rows-1)*math.Pi*2
+		rowLen := 6 + int((math.Sin(sinePos-phase)+1)/2*14)
+		for col := 0; col < rowLen; col++ {
+			idx := ((row*20+col)*7 + int(phase*50)) % len(emojis)
+			sym := emojis[idx]
+			hue := math.Mod(float64(row)*36+float64(col)*15+phase*30, 360)
+			rr, gg, bb := hslToRGB(hue, 0.9, 0.6)
+			st := tui.NewStyle().Bold().Foreground(tui.RGBColor(rr, gg, bb))
+			rowEl.AddChild(textEl(sym, st))
 		}
-		in.AddChild(textEl(sb.String(), tui.NewStyle().Foreground(a.mc()).Dim()))
+		in.AddChild(rowEl)
 	}
 	sc.AddChild(in)
 	w.AddChild(sc)
@@ -800,7 +821,7 @@ func (a *crazyApp) renderMatrixRain() *tui.Element {
 		tui.WithPadding(1))
 	w.AddChild(textEl("💚 MATRIX RAIN", tui.NewStyle().Bold().Foreground(tui.Green)))
 
-	in := flex(tui.Column, tui.WithMinWidth(300), tui.WithMinHeight(18))
+	in := flex(tui.Column, tui.WithMinWidth(300), tui.WithMinHeight(12))
 
 	chars := []string{
 		"ﾀ","ﾁ","ﾂ","ﾃ","ﾄ","ﾅ","ﾆ","ﾇ","ﾈ","ﾉ",
@@ -810,7 +831,7 @@ func (a *crazyApp) renderMatrixRain() *tui.Element {
 	}
 
 	const cols = 30
-	const rows = 16
+	const rows = 15
 
 	for row := 0; row < rows; row++ {
 		rowEl := flex(tui.Row, tui.WithGap(0))
@@ -853,7 +874,7 @@ func (a *crazyApp) renderMatrixRain() *tui.Element {
 
 	sc := flex(tui.Column, tui.WithScrollable(tui.ScrollVertical),
 		tui.WithScrollbarHidden(true),
-		tui.WithHeight(9))
+		tui.WithHeight(15))
 	sc.AddChild(in)
 	w.AddChild(sc)
 	return w
