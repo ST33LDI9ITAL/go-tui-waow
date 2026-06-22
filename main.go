@@ -434,8 +434,6 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 
 	sb.AddChild(textEl("", tui.NewStyle()))
 
-	sb.AddChild(textEl("", tui.NewStyle()))
-
 	// Danger
 	sb.AddChild(textEl("⚠️ Danger", tui.NewStyle().Bold().Foreground(tui.Red).Dim()))
 	sb.AddChild(miniBtn("⚠️ Reset Modal", tui.Red, a.modalOpen, sw))
@@ -446,9 +444,8 @@ func (a *crazyApp) renderSidebar(sw, h int) *tui.Element {
 func miniBtn(text string, col tui.Color, ref *tui.Ref, maxW int) *tui.Element {
 	b := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
 		tui.WithBorderStyle(tui.NewStyle().Foreground(col)),
-		tui.WithPadding(0))
+		tui.WithPaddingTRBL(0, 0, 0, 4))
 	b.AddChild(textEl(" "+text, tui.NewStyle().Foreground(col)))
-	b.AddChild(textEl(text, tui.NewStyle().Foreground(col).Dim()))
 	if ref != nil { ref.Set(b) }
 	return b
 }
@@ -592,10 +589,11 @@ func (a *crazyApp) renderCounter() *tui.Element {
 	if val > 0 { vCol = tui.Green }
 	if val < 0 { vCol = tui.Red }
 
-	row := flex(tui.Row, tui.WithGap(1), tui.WithJustify(tui.JustifyCenter))
+	// Value on its own row above buttons
+	w.AddChild(tui.New(tui.WithText(fmt.Sprintf("%d", val)), tui.WithTextStyle(tui.NewStyle().Bold().Foreground(vCol)), tui.WithPaddingTRBL(0, 0, 0, 4)))
 
-	// Value
-	row.AddChild(textEl(fmt.Sprintf("  %d  ", val), tui.NewStyle().Bold().Foreground(vCol)))
+	// Button row below
+	row := flex(tui.Row, tui.WithGap(1))
 
 	// Minus button (no border)
 	mBtn := flex(tui.Row, tui.WithPadding(0), tui.WithFocusable(true))
