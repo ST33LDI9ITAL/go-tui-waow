@@ -227,8 +227,8 @@ func (a *crazyApp) KeyMap() tui.KeyMap {
 }
 
 func (a *crazyApp) HandleMouse(me tui.MouseEvent) bool {
-	// Menu bar click handling
-	if me.Button == tui.MouseLeft && me.Action == tui.MousePress && me.Y == 0 {
+	// Menu bar click handling (content area only, not border)
+	if me.Button == tui.MouseLeft && me.Action == tui.MousePress && me.Y == 1 {
 		x := 1
 		for _, m := range menuDefs {
 			labelW := len([]rune(m.label)) + 2
@@ -270,13 +270,13 @@ func (a *crazyApp) HandleMouse(me tui.MouseEvent) bool {
 	// Section toggle clicks via ref map
 	if me.Button == tui.MouseLeft && me.Action == tui.MousePress {
 		for id, ref := range a.sectionRefs {
-			if el := ref.El(); el != nil && el.ContainsPoint(me.X, me.Y) {
+			if el := ref.El(); el != nil && el.ContainsContentPoint(me.X, me.Y) {
 				a.toggle(id)
 				return true
 			}
 		}
 		for th, ref := range a.themeRefs {
-			if el := ref.El(); el != nil && el.ContainsPoint(me.X, me.Y) {
+			if el := ref.El(); el != nil && el.ContainsContentPoint(me.X, me.Y) {
 				a.theme.Set(th)
 				return true
 			}
