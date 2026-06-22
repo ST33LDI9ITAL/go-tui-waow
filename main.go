@@ -169,8 +169,17 @@ type crazyApp struct {
 	sidebarWidth   int // cached sidebar width for mouse hit-testing
 	mainScrollY    *tui.State[int]
 	openMenu       string // which menu is open ("", "📁 File", etc.)
+	fwParts        []fwParticle
 	sectionRefs map[string]*tui.Ref
 	themeRefs  map[string]*tui.Ref
+}
+
+type fwParticle struct {
+	x, y       float64
+	vx, vy     float64
+	life       float64
+	hue        float64
+	phase      string
 }
 
 func newCrazyApp() *crazyApp {
@@ -296,6 +305,52 @@ func (a *crazyApp) animate() {
 	a.borderHue.Update(func(v float64) float64 { return v + 0.5 })
 	if a.frame%5 == 0 { a.spinFrame.Update(func(v int) int { return v + 1 }) }
 	a.bouncePhase.Update(func(v float64) float64 { return v + 0.04 })
+
+	// Firework logic
+	// Spawn new firework rockets periodically
+	if a.frame%15 == 0 && len(a.fwParts) < 30 {
+		x := 5 + float64(a.frame*7%50)
+		a.fwParts = append(a.fwParts, fwParticle{
+			x: x, y: 16, vy: -0.3 - float64(a.frame%5)*0.1,
+			life: 2.0, hue: float64(a.frame*37 % 360),
+			phase: "rise",
+		})
+	}
+
+	// Update particles
+	var alive []fwParticle
+	for _, p := range a.fwParts {
+		p.life -= 0.02
+		if p.life <= 0 { continue }
+
+		switch p.phase {
+		case "rise":
+			p.y += p.vy
+			p.vy += 0.005 // gravity deceleration
+			if p.vy >= 0 {
+				// Peak reached — explode!
+				for i := 0; i < 12; i++ {
+					angle := float64(i) * math.Pi / 6
+					speed := 0.15 + float64(i%4)*0.05
+					alive = append(alive, fwParticle{
+						x: p.x, y: p.y,
+						vx: math.Cos(angle) * speed,
+						vy: math.Sin(angle) * speed,
+						life: 1.0, hue: p.hue,
+						phase: "explode",
+					})
+				}
+				continue
+			}
+			alive = append(alive, p)
+		case "explode":
+			p.x += p.vx
+			p.y += p.vy
+			p.vy += 0.02 // gravity
+			alive = append(alive, p)
+		}
+	}
+	a.fwParts = alive
 }
 
 func (a *crazyApp) fps() float64 {
@@ -674,25 +729,36 @@ func spinRow(s string, c tui.Color, l string) *tui.Element {
 func (a *crazyApp) renderFireworks() *tui.Element {
 	w := flex(tui.Column,
 		tui.WithBorder(tui.BorderSingle),
-		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.BrightBlack)),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(a.ac())),
 		tui.WithPadding(1))
-	w.AddChild(textEl("🎆 FIREWORKS", tui.NewStyle().Bold().Foreground(tui.Yellow)))
-	grid := flex(tui.Column, tui.WithGap(0), tui.WithMinHeight(8))
-	t := time.Since(a.startTime).Seconds()
-	cs := []tui.Color{tui.Red, tui.Yellow, tui.Green, tui.Cyan, tui.Blue, tui.Magenta}
-	for row := 0; row < 6; row++ {
-		var sb strings.Builder
+	w.AddChild(textEl("🎆 FIREWORKS", tui.NewStyle().Bold().Foreground(a.mc())))
+
+	grid := flex(tui.Column, tui.WithGap(0), tui.WithMinHeight(18))
+	// Render particle grid
+	for row := 0; row < 18; row++ {
+		rowEl := flex(tui.Row, tui.WithGap(0))
 		for col := 0; col < 30; col++ {
-			val := math.Sin(float64(col)*0.5+t*3+float64(row)*0.3) * math.Cos(float64(row)*0.5+t*2)
-			switch {
-			case val > 0.6: sb.WriteRune('●')
-			case val > 0.2: sb.WriteRune('·')
-			case val < -0.6: sb.WriteRune('◆')
-			case val < -0.2: sb.WriteRune('·')
-			default: sb.WriteByte(' ')
+			ch := " "
+			st := tui.NewStyle()
+			for _, p := range a.fwParts {
+				px, py := int(p.x), int(p.y)
+				if px == col && py == row && p.life > 0 {
+					switch p.phase {
+					case "rise":
+						ch = "|"
+						st = tui.NewStyle().Bold().Foreground(tui.Yellow)
+					case "explode":
+						rr, gg, bb := hslToRGB(p.hue, 1.0, 0.5+0.3*p.life)
+						ch = "●"
+						if p.life < 0.4 { ch = "·" }
+						st = tui.NewStyle().Bold().Foreground(tui.RGBColor(rr, gg, bb))
+					}
+					break
+				}
 			}
+			rowEl.AddChild(textEl(ch, st))
 		}
-		grid.AddChild(textEl(sb.String(), tui.NewStyle().Foreground(cs[row])))
+		grid.AddChild(rowEl)
 	}
 	w.AddChild(grid)
 	return w
