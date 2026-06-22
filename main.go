@@ -89,10 +89,29 @@ func renderBar(v float64, w int) string {
 }
 
 func tickerText(phase float64) string {
-	sp := int(phase * 20)
 	text := "GO-TUI IS AWESOME! 🚀 THE FUTURE OF TERMINAL UI IS HERE! ✨ "
-	if len(text) == 0 { return "" }
-	return text[sp%len(text):] + text[:sp%len(text)]
+	n := tui.ClusterCount(text)
+	if n == 0 { return "" }
+	sp := int(phase*20) % n
+	return clusterRotate(text, sp)
+}
+
+func clusterRotate(s string, startCluster int) string {
+	var pre, post strings.Builder
+	idx := 0
+	rest := s
+	for len(rest) > 0 {
+		cluster, _, size, _ := tui.NextClusterRunes(rest)
+		if size == 0 { break }
+		if idx < startCluster {
+			pre.WriteString(cluster)
+		} else {
+			post.WriteString(cluster)
+		}
+		idx++
+		rest = rest[size:]
+	}
+	return post.String() + pre.String()
 }
 
 func flex(dir tui.Direction, opts ...tui.Option) *tui.Element {
@@ -169,7 +188,7 @@ func newCrazyApp() *crazyApp {
 		sectionRefs: map[string]*tui.Ref{
 			"bounce": tui.NewRef(), "progress": tui.NewRef(),
 			"metrics": tui.NewRef(), "fireworks": tui.NewRef(),
-			"symbols": tui.NewRef(), "matrix": tui.NewRef(), "counter": tui.NewRef(),
+			"symbols": tui.NewRef(), "matrix": tui.NewRef(), "counter": tui.NewRef(), "map": tui.NewRef(),
 		},
 		themeRefs: map[string]*tui.Ref{
 			"cyber": tui.NewRef(), "ocean": tui.NewRef(),
@@ -517,12 +536,38 @@ func (a *crazyApp) renderCounter() *tui.Element {
 	vCol := tui.Cyan
 	if val > 0 { vCol = tui.Green }
 	if val < 0 { vCol = tui.Red }
-	row := flex(tui.Row, tui.WithGap(2), tui.WithJustify(tui.JustifyCenter))
-	row.AddChild(textEl("➖", tui.NewStyle().Foreground(tui.Red).Bold()))
+
+	row := flex(tui.Row, tui.WithGap(1), tui.WithJustify(tui.JustifyCenter))
+
+	// Minus button
+	mBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.Red)),
+		tui.WithPadding(0), tui.WithFocusable(true))
+	mBtn.AddChild(textEl(" ➖ ", tui.NewStyle().Foreground(tui.Red).Bold()))
+	a.ctrDown.Set(mBtn)
+	row.AddChild(mBtn)
+
+	// Value
 	row.AddChild(textEl(fmt.Sprintf("  %d  ", val), tui.NewStyle().Bold().Foreground(vCol)))
-	row.AddChild(textEl("➕", tui.NewStyle().Foreground(tui.Green).Bold()))
+
+	// Plus button
+	pBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.Green)),
+		tui.WithPadding(0), tui.WithFocusable(true))
+	pBtn.AddChild(textEl(" ➕ ", tui.NewStyle().Foreground(tui.Green).Bold()))
+	a.ctrUp.Set(pBtn)
+	row.AddChild(pBtn)
+
+	// Reset button
+	rBtn := flex(tui.Row, tui.WithBorder(tui.BorderRounded),
+		tui.WithBorderStyle(tui.NewStyle().Foreground(tui.BrightBlack)),
+		tui.WithPadding(0), tui.WithFocusable(true))
+	rBtn.AddChild(textEl(" 🔄 ", tui.NewStyle().Dim()))
+	a.ctrReset.Set(rBtn)
+	row.AddChild(rBtn)
+
 	w.AddChild(row)
-	w.AddChild(textEl(fmt.Sprintf("  Value: %d  |  Press +/- or click sidebar buttons", val), tui.NewStyle().Dim()))
+	w.AddChild(textEl(fmt.Sprintf("Value: %d  |  +/- keys or click buttons", val), tui.NewStyle().Dim()))
 	return w
 }
 
